@@ -1,0 +1,25 @@
+steps:
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Publish Project.Name.Functions'
+    inputs:
+      command: 'publish'
+      publishWebProjects: false
+      projects: 'Project.Name.Functions/*.csproj'
+      arguments: '--verbosity diag --configuration Release --output publish_output'
+      zipAfterPublish: false
+      modifyOutputPath: false
+
+  - task: ArchiveFiles@2
+    displayName: "Archive files"
+    inputs:
+      rootFolderOrFile: '$(System.DefaultWorkingDirectory)/publish_output'
+      includeRootFolder: false
+      archiveFile: '$(System.ArtifactStagingDirectory)/build$(Build.BuildId).zip'
+
+  - task: PublishPipelineArtifact@1
+    displayName: 'Publish pipeline artifact'
+    inputs:
+      targetPath: '$(System.ArtifactStagingDirectory)/build$(Build.BuildId).zip'
+      artifact: 'drop'
+     

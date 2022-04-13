@@ -1,0 +1,42 @@
+## Required variables:
+## none
+
+steps:
+- task: GitVersion@5
+  displayName: 'GitVersion'
+  inputs:
+    runtime: 'full'
+    updateAssemblyInfo: true
+
+- task: PowerShell@2
+  displayName: Set Build Number
+  inputs:
+    targetType: 'inline'
+    script: '"##vso[build.updatebuildnumber]$(GitVersion.MajorMinorPatch)"'
+
+- task: BatchScript@1
+  displayName: Run script VSDEVCMD
+  inputs:
+    filename: '$(VS150COMNTOOLS)VsDevCmd.bat'
+    modifyEnvironment: true
+    failOnStandardError: true
+
+- task: CmdLine@2
+  displayName: Display Environment Settings
+  inputs:
+    script: 'Set'
+
+- task: NuGetToolInstaller@1
+  displayName: Use NuGet 5.x
+  inputs:
+    versionSpec: '5.x'
+    checkLatest: true
+
+- task: NuGetCommand@2
+  displayName: NuGet restore
+  inputs:
+    command: 'restore'
+    restoreSolution: '$(Build.SourcesDirectory)\*.sln'
+    feedsToUse: 'config'
+    nugetConfigPath: '$(Build.SourcesDirectory)\Nuget.config'
+    restoreDirectory: '$(Build.SourcesDirectory)\packages'

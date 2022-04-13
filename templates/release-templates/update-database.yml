@@ -1,0 +1,52 @@
+parameters:
+  - name: azureSubscription
+
+steps:
+
+  # #
+  # # Enable Azure Service resource access to this Azure Sql Server
+  # #   
+  - task: AzureCLI@2
+    displayName: 'Get ASQL Login Token'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: ps
+      scriptLocation: inlineScript
+      inlineScript: |
+        echo "Obtain database access token"
+        foreach ($token IN (az account get-access-token --resource=https://database.windows.net --query accessToken)) {SET var=$token}  
+        echo "The token is:" $token
+        "##vso[task.setvariable variable=connectionToken;]$token"
+    enabled: true
+
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      buildType: 'current'
+      artifact: 'MigrationScripts'
+      path: $(Pipeline.Workspace)\_Project.Name
+
+  - task: AzureCLI@2
+    displayName: 'PowerShell Script List folder structure'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: pscore       
+      scriptLocation: inlineScript
+      inlineScript: |
+        echo "LIST SystemDefaultWorkingDirectory"
+        Get-ChildItem -Path $(System.DefaultWorkingDirectory)\*.* -Recurse -Force
+        
+        echo "LIST PipelineWorkspace"
+        Get-ChildItem -Path $(Pipeline.Workspace)\*.* -Recurse -Force
+
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Update Database Execute SQL Migration Script'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      ServerName: $(SqlServerName).database.windows.net
+      DatabaseName: $(DatabaseName)
+      SqlUsername: $(sql_server_name)
+      SqlPassword: $(sa-azuresql)
+      deployType: SqlTask
+      SqlFile: '$(Pipeline.Workspace)/_Project.Name/scripts.sql'
+      AdditionalArguments: '/AccessToken:$(connectionToken)'
+      IpDetectionMethod: 'AutoDetect'

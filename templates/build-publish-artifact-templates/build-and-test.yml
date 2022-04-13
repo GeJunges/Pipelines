@@ -1,0 +1,58 @@
+steps:
+
+  - task: Assembly-Info-NetCore@2
+    displayName: Update Assembly Manifest
+    inputs:
+      InsertAttributes: true
+      Company: ABN Amro
+      Product: $(Build.AssemblyProduct)
+      Copyright: Copyright � $(date:YYYY) Company Name
+      VersionNumber: $(GitVersion.AssemblySemVer)
+      InformationalVersion: $(GitVersion.FullSemVer)
+      FileVersionNumber: $(GitVersion.AssemblySemFileVer)
+      DisableTelemetry: true
+
+  # - task: SonarQubePrepare@4
+  #   displayName: Prepare analysis on SonarQube
+  #   condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  #   continueOnError: True
+  #   inputs:
+  #     SonarQube: 890b521f-7560-4f6d-860f-e2e00638a828
+  #     projectKey: $(Build.AssemblyProduct)
+  #     projectName: $(Build.AssemblyProduct)
+  #     projectVersion: $(Build.BuildNumber)
+
+  - task: VSBuild@1
+    displayName: Build Solution
+    inputs:
+      solution: '$(solution)'
+      platform: '$(buildPlatform)'
+      configuration: '$(buildConfiguration)'
+      clean: true
+      maximumCpuCount: true
+
+  - task: DotNetCoreCLI@2
+    displayName: Run Tests
+    continueOnError: True
+    inputs:
+      command: test
+      projects: '**/*Tests/*.csproj'
+      arguments: '--configuration $(buildConfiguration) --no-restore --collect "Code coverage"'
+
+  # - task: SonarQubeAnalyze@4
+  #   displayName: Run Code Analysis
+  #   condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  #   continueOnError: True
+  
+  # - task: SonarQubePublish@4
+  #   displayName: Publish Quality Gate Result
+  #   condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  #   continueOnError: True
+
+  - task: ATP.ATP-GitTag.GitTag.GitTag@5
+    displayName: 'GitTag '
+    continueOnError: True
+    inputs:
+      tagUser: $(Build.RequestedFor)
+      tagEmail: $(Build.RequestedForEmail)
+      forceTagCreation: true

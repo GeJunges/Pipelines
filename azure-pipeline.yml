@@ -1,0 +1,160 @@
+resources:
+  # repositories:
+  # - repository: alias-templates
+  #   type: git
+  #   name: Place/name-pipeline-templates
+  #   ref: "refs/heads/master"    
+
+trigger:
+  branches:
+    include:
+    - refs/heads/*
+  batch: True
+
+pool: 'windows-latest'
+
+variables:
+  - name: 'solution'
+    value: '**/*.sln'
+  - name: 'buildPlatform'
+    value: 'Any CPU'
+  - name: 'buildConfiguration'
+    value: 'Release'
+  - name: 'Build.AssemblyProduct'
+    value: 'Company.Grid.Project.Name'    
+  - name: BuildAgentPool
+    value: 'windows-latest'      
+  - name: ReleaseAgentPool
+    value: 'windows-latest'     
+  - template: templates/variables.yml
+
+
+stages:
+
+  - stage: StageBuildAndTest
+    displayName: 'Build And Test'    
+
+    jobs:
+      - job: BuildAndTest
+        displayName: Build And Test
+        
+        pool:
+          name: $(BuildAgentPool)
+        steps:
+          - checkout: self
+            clean: true
+            persistCredentials: True
+          
+          - template: templates/build-initialisation.yml
+        
+          - template: templates/build-publish-artifact-templates/build-and-test.yml
+
+  - stage: PublishArtifacts
+    displayName: 'Publish Artifacts'
+    dependsOn: StageBuildAndTest
+    condition: eq(dependencies.StageBuildAndTest.result, 'Succeeded')
+
+    jobs:
+      - job: PublishArtifactsDb
+        displayName: 'Publish Artifacts Db'           
+        condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'), eq(variables['Build.SourceBranch'], 'refs/heads/master')) 
+        pool: 
+          name: $(BuildAgentPool)
+        steps:
+        - checkout: self
+          clean: true
+          persistCredentials: True        
+        
+        - template: templates/build-initialisation.yml
+  
+        - template: templates/build-publish-artifact-templates/publish-db-artifacts.yml
+      
+
+      - job: PublishArtifactsFunctions
+        displayName: 'Publish Artifacts Functions'     
+        condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))   
+        pool: 
+          name: $(BuildAgentPool)
+        steps:
+        - checkout: self
+          clean: true
+          persistCredentials: True
+        
+        - template: templates/build-initialisation.yml
+      
+        - template: templates/build-publish-artifact-templates/publish-functions-artifacts.yml
+
+  - stage: ReleaseTest
+    displayName: 'Release Test'
+    dependsOn: PublishArtifacts
+    condition: eq(dependencies.PublishArtifacts.result, 'Succeeded')  
+
+    variables:
+      - template: templates/vars/test-variables.yml
+
+    jobs:
+      - job: DeployTest
+        displayName: 'Deploy Test'
+        condition: or(eq(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.Reason'], 'Manual'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+        pool:
+          vmImage: $(ReleaseAgentPool)
+        steps:
+          - checkout: self
+            clean: true
+            persistCredentials: True
+
+          - template: templates/release-templates/deploy-release.yml
+            parameters:
+              azureSubscription: 'subscription-t-rg-name' 
+            
+  - stage: ReleaseAcceptance
+    displayName: 'Release Acceptance'
+    dependsOn: PublishArtifacts
+    condition: and(eq(dependencies.PublishArtifacts.result, 'Succeeded'), or(eq(variables['Build.Reason'], 'Manual'), eq(variables['Build.SourceBranch'], 'refs/heads/master')) )
+
+    variables:
+      - template: templates/vars/acceptance-variables.yml
+
+    jobs:
+      - job: DeployAcceptance
+        displayName: 'Deploy Acceptance'
+        dependsOn: SN_CreateChange        
+        condition: or(eq(variables['Build.Reason'], 'Manual'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+        pool:
+          vmImage: $(ReleaseAgentPool)        
+        steps:
+          - checkout: self
+            clean: true
+            persistCredentials: True
+
+          - template: templates/release-templates/deploy-release.yml
+            parameters:
+              azureSubscription: 'subscription-a-rg-name'       
+         
+
+  - stage: ReleaseProduction
+    displayName: 'Release Production'
+    dependsOn: 
+      - PublishArtifacts
+      - ReleaseAcceptance    
+    condition: and(eq(dependencies.PublishArtifacts.result, 'Succeeded'), eq(dependencies.ReleaseAcceptance.result, 'Succeeded'), or(eq(variables['Build.Reason'], 'Manual'), eq(variables['Build.SourceBranch'], 'refs/heads/master')))  
+
+    variables:
+      - template: templates/vars/production-variables.yml
+
+    jobs:
+      - job: DeployProduction
+        displayName: 'Deploy Production'
+        dependsOn: SN_CreateChange               
+        condition: or(eq(variables['Build.Reason'], 'Manual'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+        pool:
+          vmImage: $(ReleaseAgentPool)       
+        steps:
+          - checkout: self
+            clean: true
+            persistCredentials: True
+
+          - template: templates/release-templates/deploy-release.yml
+            parameters:
+              azureSubscription: 'subscription-p-rg-name'      
+                

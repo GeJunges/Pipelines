@@ -1,0 +1,7 @@
+variables:
+  - name: functionPartialName
+    value: function-name
+  - name: DatabaseName 
+    value: 'database-name'
+  - name: ExternalSourceDatabaseName   
+    value: 'external-database-name'

@@ -1,0 +1,29 @@
+parameters:
+## The path to the generated migration script.
+  - name: MigrationScriptPath 
+    type: string
+## The path to the csproj file to use.
+  - name: ProjectPath 
+    type: string
+
+steps:
+    - task: DotNetCoreCLI@2
+      displayName: 'Drop Database'
+      inputs:
+        command: 'custom'
+        custom: 'ef'
+        arguments: 'database drop --force --project ${{ parameters.ProjectPath }}'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Update Database'
+      inputs:
+        command: 'custom'
+        custom: 'ef'
+        arguments: 'database update --project ${{ parameters.ProjectPath }}'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Create Database Script'
+      inputs:
+        command: 'custom'
+        custom: 'ef'
+        arguments: 'migrations script --output ${{ parameters.MigrationScriptPath }} --idempotent --project ${{ parameters.ProjectPath }}'

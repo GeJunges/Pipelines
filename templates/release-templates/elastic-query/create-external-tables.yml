@@ -1,0 +1,80 @@
+parameters:
+  - name: databaseName
+  - name: azureSubscription
+
+steps:
+
+  #
+  # Enable Azure Service resource access to this Azure Sql Server
+  #   
+  - task: AzureCLI@2
+    displayName: 'Get ASQL Login Token'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: pscore
+      scriptLocation: inlineScript
+      inlineScript: |
+        echo "Obtain database access token"
+        foreach ($token IN (az account get-access-token --resource=https://database.windows.net --query accessToken)) {SET var=$token}  
+        echo "The token is:" $token
+        "##vso[task.setvariable variable=connectionToken;]$token"
+    enabled: true
+
+  #
+  # Create External Table pointing to External Data Source
+  #
+  - task: AzureCLI@2
+    displayName: 'Create External Table'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: pscore       
+      scriptLocation: inlineScript
+      inlineScript: |
+        $sqlServerUrl = "$(SqlServerName).database.windows.net" 
+        $database = "${{ parameters.databaseName }}" 
+        $connectionString = "Server=tcp:$sqlServerUrl,1433;Initial Catalog=$database;Persist Security Info=False;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;" 
+
+        # Create the connection object 
+        $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString) 
+
+        # Set AAD generated token to SQL connection token 
+        $connection.AccessToken = $(connectionToken)   
+        $connection.AccessToken 
+
+        $query = "
+        IF SCHEMA_ID(N'Schema_Name') IS NULL EXEC(N'CREATE SCHEMA [Schema_Name];');
+
+        IF NOT EXISTS ( SELECT * FROM sys.external_tables WHERE object_id = OBJECT_ID(N'[Schema_Name].[Table_Name]'))
+          CREATE EXTERNAL TABLE [Schema_Name].[Table_Name](
+            [Id] [int] NULL,
+            [Name] [nvarchar](50) NULL,
+            [Description] [nvarchar](50) NULL,
+             [InsertedDate] [datetime2](7) NOT NULL
+          ) 
+          WITH ( 
+          DATA_SOURCE = ElasticDbSourceLookup,
+          SCHEMA_NAME = 'Schema_Name',
+          OBJECT_NAME = 'Table_Name');         
+        " 
+
+        try {
+          echo "Opens connection to Azure SQL Database"
+          $connection.Open()           
+        
+          echo "Executes a query"
+          $command = New-Object -Type System.Data.SqlClient.SqlCommand($query, $connection) 
+          $command.ExecuteNonQuery()
+
+          echo "CREATE EXTERNAL TABLES succeeded"      
+        } 
+        catch {
+          echo "Something went wrong" 
+          Write-Host($error) Continue 
+          throw;
+        }
+        finally {          
+          echo "Closes connection to Azure SQL Database" 
+          $connection.Close()
+        }; 
+      name: 'execute_query'
+      enabled: true           

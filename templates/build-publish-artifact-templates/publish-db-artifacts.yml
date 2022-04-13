@@ -1,0 +1,19 @@
+steps:
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Restore local tools'
+    inputs:
+      command: custom
+      custom: tool
+      arguments: 'restore'      
+     
+  - template: create-ef-migration-script.yml
+    parameters:
+      ProjectPath: '$(Build.SourcesDirectory)\Project.Name.Db'
+      MigrationScriptPath: '$(Build.ArtifactStagingDirectory)\migrations\scripts.sql'
+
+  - task: PublishPipelineArtifact@1
+    displayName: 'Publish pipeline artifact'
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)\migrations'
+      artifactName: 'MigrationScripts'

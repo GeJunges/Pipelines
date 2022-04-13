@@ -1,0 +1,18 @@
+parameters:
+  - name: azureSubscription
+
+steps:
+
+  - template: elastic-query/create-external-tables.yml
+    parameters:
+      databaseName: $(DatabaseName)  
+      azureSubscription:  ${{ parameters.azureSubscription }}         
+
+  - template: update-database.yml
+    parameters: 
+      azureSubscription:  ${{ parameters.azureSubscription }}
+
+  - template: deploy-functions.yml    
+    parameters: 
+      azureSubscription:  ${{ parameters.azureSubscription }}  
+

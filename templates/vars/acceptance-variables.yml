@@ -1,0 +1,24 @@
+variables:
+  - group: Name.VariableGroup.GlobalVars
+  
+  - name: env_variable
+    value: 'a'  
+  - name: enviroment
+    value: 'a'   
+  - name: SubscriptionId
+    value: ''
+  - name: AzureSubscription
+    value: ''    
+  - name: ServicePrincipalGroupName
+    value: ''     
+
+  - name: ResourceGroupName
+    value:         
+  - name: SqlServerName
+    value: ''
+  - name: StorageAccountName
+    value: ''
+  - name: ApplicationInsightsName
+    value: ''
+  - name: AppServiceName 
+    value: 'blah-a-$(functionPartialName)-func'    

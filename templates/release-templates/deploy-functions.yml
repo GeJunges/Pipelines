@@ -1,0 +1,34 @@
+parameters:
+  - name: azureSubscription
+
+steps:
+
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      buildType: 'current'
+      artifact: 'drop'       
+      path: $(Pipeline.Workspace)\_Project.Name     
+
+  - task: AzureCLI@2
+    displayName: 'PowerShell Script List folder structure'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: pscore       
+      scriptLocation: inlineScript
+      inlineScript: |
+        echo "List Pipeline.Workspace"
+        Get-ChildItem -Path $(Pipeline.Workspace)\*.* -Recurse -Force
+
+  - task: FileTransform@2
+    displayName: 'File Transform: FunctionApp/build$(Build.BuildId).zip'
+    inputs:
+      folderPath: '$(Pipeline.Workspace)/_Project.Name/build$(Build.BuildId).zip'
+      jsonTargetFiles: appsettings.json    
+
+  - task: AzureFunctionApp@1
+    displayName: 'Azure Function App Deploy: $(AppServiceName)'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      appType: functionApp
+      appName: $(AppServiceName)
+      package: '$(Pipeline.Workspace)/_Project.Name/build$(Build.BuildId).zip'    
