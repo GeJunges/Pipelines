@@ -4,7 +4,7 @@ steps:
     displayName: Update Assembly Manifest
     inputs:
       InsertAttributes: true
-      Company: ABN Amro
+      Company: Company Name
       Product: $(Build.AssemblyProduct)
       Copyright: Copyright � $(date:YYYY) Company Name
       VersionNumber: $(GitVersion.AssemblySemVer)

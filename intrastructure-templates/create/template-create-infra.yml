@@ -1,0 +1,126 @@
+parameters:
+  - name: targetEnvironment
+  - name: azureSubscription  
+
+jobs:
+
+  - job: CreatesDatabase
+    displayName: 'Creates Database'
+    variables:
+      - template: ../../vars/${{ parameters.targetEnvironment }}-variables.yml
+        parameters: 
+          targetEnvironment: ${{ parameters.targetEnvironment }}            
+    steps:
+      - checkout: self
+        clean: true
+        persistCredentials: True
+
+      - task: Bash@3
+        displayName: Check Job Variables
+        inputs:
+          targetType: 'inline'
+          script: |
+            set  
+
+      - template: database/create-sql-database.yml
+        parameters:
+          databaseName: $(DatabaseName)
+          azureSubscription:  ${{ parameters.azureSubscription }} 
+
+  - job: CreatesAdminUser
+    displayName: 'Creates SQL Admin User'
+    dependsOn: CreatesDatabase
+    variables:
+      - template: ../../vars/${{ parameters.targetEnvironment }}-variables.yml
+        parameters: 
+          targetEnvironment: ${{ parameters.targetEnvironment }}       
+    steps:
+      - checkout: self
+        clean: true
+        persistCredentials: True
+
+      - task: Bash@3
+        displayName: Check Job Variables
+        inputs:
+          targetType: 'inline'
+          script: |
+            set  
+
+      - template: database/create-admin-user.yml
+        parameters:
+          databaseName: $(DatabaseName)        
+          azureSubscription:  ${{ parameters.azureSubscription }}                
+
+  - job: GrantManagedIdentityPermissions
+    displayName: 'Grant Managed Identity Permissions'
+    dependsOn: CreatesAdminUser      
+    variables:
+      - template: ../../vars/${{ parameters.targetEnvironment }}-variables.yml
+        parameters: 
+          targetEnvironment: ${{ parameters.targetEnvironment }}       
+    steps:
+      - checkout: self
+        clean: true
+        persistCredentials: True
+
+      - task: Bash@3
+        displayName: Check Job Variables
+        inputs:
+          targetType: 'inline'
+          script: |
+            set  
+
+      - template: database/grant-managed-identity-permission.yml
+        parameters:
+          databaseName: $(DatabaseName)        
+          azureSubscription:  ${{ parameters.azureSubscription }}                           
+
+  - job: ConfiguresAzureSQLElasticDatabaseQuery 
+    displayName: 'Configures ASQL Elastic Database Query'
+    dependsOn: GrantManagedIdentityPermissions
+    variables:
+      - template: ../../vars/${{ parameters.targetEnvironment }}-variables.yml
+        parameters: 
+          targetEnvironment: ${{ parameters.targetEnvironment }}       
+    steps:
+      - checkout: self
+        clean: true
+        persistCredentials: True
+
+      - task: Bash@3
+        displayName: Check Job Variables
+        inputs:
+          targetType: 'inline'
+          script: |
+            set          
+
+      - template: elastic-query/config-elastic-database-query.yml
+        parameters:
+          databaseName: $(DatabaseName)
+          externalSourceDatabaseName: $(ExternalSourceDatabaseName)    
+          azureSubscription:  ${{ parameters.azureSubscription }}   
+
+  - job: SetupAzureFunctionApp
+    displayName: 'Setup Azure Function App'
+    variables:
+      - template: ../../vars/${{ parameters.targetEnvironment }}-variables.yml
+        parameters: 
+          targetEnvironment: ${{ parameters.targetEnvironment }}       
+    steps:
+      - checkout: self
+        clean: true
+        persistCredentials: True    
+
+      - task: Bash@3
+        displayName: Check Job Variables
+        inputs:
+          targetType: 'inline'
+          script: |
+            set               
+
+      - template: function/create-function.yml
+        parameters: 
+          targetEnvironment: $(env_variable)
+          azureSubscription:  ${{ parameters.azureSubscription }} 
+
+

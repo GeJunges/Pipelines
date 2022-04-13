@@ -1,0 +1,88 @@
+parameters:
+  - name: targetEnvironment
+  - name: azureSubscription
+
+steps:
+  #
+  # Deploy App Service Function App
+  #
+  - task: AzureFunctionApp@1
+    displayName: 'Deploy App Service Function App'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      appServiceName: $(AppServiceName)
+      appServiceKind: functionapp
+      windowsFxVersion: 'NET50'
+      workerProcessBitness: 64
+      applicationInsightsName: $(name_ai)
+      loggingStorageAccount: $(name_storage)
+      specifyAppSettings: true
+      appSettings: |
+        FUNCTIONS_EXTENSION_VERSION:~4
+        FUNCTIONS_WORKER_RUNTIME:dotnet
+      addAdditionalIPRanges: true
+      additionalIPRanges: |
+        1.2.3.4/32
+
+  #
+  # Function App PIM
+  #
+  - task: AzureFunctionApp@1
+    displayName: 'Funciton App PIM'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      appServiceName: $(AppServiceName)
+      action: enableElevatedAccess
+      appServiceKind: functionapp
+      windowsFxVersion: 'NET50'
+      workerProcessBitness: 64
+      applicationInsightsName: $(name_ai)
+      loggingStorageAccount: $(name_storage)
+      specifyAppSettings: true
+      appSettings: |
+        FUNCTIONS_EXTENSION_VERSION:~4
+        FUNCTIONS_WORKER_RUNTIME:dotnet
+      requestorGroupName: $(name_admins_name)
+      approverGroupName: $(name_admins_name)
+
+  #
+  # Give contributor rights to SA
+  #
+  - task: AzureCLI@2
+    displayName: 'Set .Net 6.0 to Function'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: pscore       
+      scriptLocation: inlineScript
+      inlineScript: |
+        az functionapp config set --net-framework-version v6.0 -n $(AppServiceName) -g $(ResourceGroupName)
+    enabled: true
+
+  #
+  # Give contributor rights to SA
+  #
+  - task: AzureCLI@2
+    displayName: 'Give contributor rights to SA'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: pscore       
+      scriptLocation: inlineScript
+      inlineScript: |
+        New-AzRoleAssignment -ObjectId $(NAMESpnEntObjectid) -RoleDefinitionName Contributor -Scope "/subscriptions/$(subscriptionId)/resourceGroups/$(ResourceGroupName)/providers/Microsoft.Web/sites/$(AppServiceName)"
+    enabled: false
+
+  #
+  # [TEST only] Give contributor rights to NAME security group 
+  #
+  - ${{ if eq(variables.env_variable, 't') }}:
+    - task: AzureCLI@2
+      displayName: '[TEST only] Give contributor rights to NAME security group '
+      inputs:
+        azureSubscription: ${{ parameters.azureSubscription }}
+        scriptType: pscore       
+        scriptLocation: inlineScript
+        inlineScript: |
+          New-AzRoleAssignment -ObjectId $(name_admins_objectId) -RoleDefinitionName Contributor -Scope "/subscriptions/$(subscriptionId)/resourceGroups/name-t-rg/providers/Microsoft.Web/sites/$(AppServiceName)"
+      enabled: true

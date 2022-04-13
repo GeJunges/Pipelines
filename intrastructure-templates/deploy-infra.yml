@@ -1,0 +1,38 @@
+parameters:
+  - name: targetEnvironment
+  - name: azureSubscription  
+  - name: infrastructureAction
+
+stages:
+    
+  - stage: ${{ parameters.targetEnvironment }}
+    displayName: '${{ parameters.infrastructureAction }} ${{ parameters.targetEnvironment }} Infrastructure using ${{ parameters.azureSubscription }}'
+
+    variables:
+      - template: ../vars/${{ parameters.targetEnvironment }}-variables.yml
+        parameters: 
+          targetEnvironment: ${{ parameters.targetEnvironment }}              
+    
+    jobs:
+
+      - job: CheckStageVariables
+        displayName: 'Check Stage Variables'
+        steps:
+          - task: Bash@3
+            inputs:
+              targetType: 'inline'
+              script: |
+                set
+
+      - ${{ if eq(parameters.infrastructureAction, 'Create')}}:      
+        - template: create/template-create-infra.yml    
+          parameters: 
+            targetEnvironment:  ${{ parameters.targetEnvironment }}
+            azureSubscription:  ${{ parameters.azureSubscription }}
+
+      - ${{ if eq(parameters.infrastructureAction, 'Destroy') }}:
+        - template: destroy/template-destroy-infra.yml    
+          parameters: 
+            targetEnvironment:  ${{ parameters.targetEnvironment }}   
+            azureSubscription:  ${{ parameters.azureSubscription }}     
+

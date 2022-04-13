@@ -1,0 +1,46 @@
+parameters:
+  - name: databaseName
+  - name: azureSubscription
+
+steps:
+  #
+  # Create Db Functions MI
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Create Db Functions MI'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: createSQLUser
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      sqlContainedDBUserType: aads
+      sqlContainedDBUserObjectID: $(name_lookup_func_objectid)
+
+  #
+  # Grant Db Read/Write Azure Functions MI
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Grant Db Read/Write Azure Functions MI'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: addSQLRole
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      sqlContainedDBUserType: aads
+      sqlContainedDBUserObjectID: $(name_lookup_func_objectid)
+      sqlContainedDBUserRole: DBOperator      
+
+  #
+  # Grant Db Read/Write Azure Functions MI
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Grant Data Factory Functions MI'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      dataFactoryName: $(name_adf)
+      action: addPermission
+      securityPrincipalType: servicePrincipal
+      servicePrincipalObjectId: $(name_lookup_func_objectid)     

@@ -1,0 +1,190 @@
+parameters:
+  - name: databaseName
+  - name: azureSubscription
+
+steps:
+  #
+  # Create Admin User in SQL Database
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Create Admin User'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: createSQLUser
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      sqlContainedDBUserType: sql
+      sqlContainedDBUserName: $(sql-admin)
+      keyVaultCreateName: $(kv-name)
+
+  #
+  # Add SQL Role to Admin User
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Grant Db Operator Role to Admin User'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: addSQLRole
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      sqlContainedDBUserType: sql
+      sqlContainedDBUserName: $(sql-admin)
+      sqlContainedDBUserRole: DBOperator
+
+  # #
+  # # Add NAME Security Group
+  # #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Add NAME Security Group'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: createSQLUser
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      sqlContainedDBUserObjectID: $(name_admins_objectId)
+
+  # #
+  # # Grant Db Operator Role to NAME Security Group
+  # #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Grant Db Operator Role to NAME Security Group'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: addSQLRole
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      sqlContainedDBUserObjectID: $(name_admins_objectId)
+      sqlContainedDBUserRole: DBOperator
+ 
+
+  # #
+  # # Add SPN
+  # #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Add SPN'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: createSQLUser
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      sqlContainedDBUserType: aads
+      sqlContainedDBUserObjectID: $(name-spn-objectId)
+
+  # #
+  # # Grant Db Operator Role to SPN
+  # #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Grant Db Operator Role to SPN'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: addSQLRole
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      sqlContainedDBUserType: aads
+      sqlContainedDBUserObjectID: $(name-spn-objectId)
+      sqlContainedDBUserRole: DBOperator
+
+  # #
+  # # FROM HERE
+  # #
+
+  # #
+  # # Get IP Address of Agent
+  # #
+
+  - task: AzureCLI@2
+    displayName: 'Get IP Address of Agent'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: ps
+      scriptLocation: inlineScript
+      inlineScript: |
+        $content = Invoke-RestMethod -Uri ('http://ipinfo.io/'+(Invoke-WebRequest -uri "http://ifconfig.me/ip").Content)
+        $ip = $content.ip
+        echo "The IP Address is:" $ip
+        "##vso[task.setvariable variable=ipAddress;]$ip"
+    enabled: true
+
+  # #
+  # # Enable Azure Service resource access to this Azure Sql Server
+  # #  
+  - task: AzureCLI@2
+    displayName: 'Enable Azure Service resource access to this Azure Sql Server'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: ps
+      scriptLocation: inlineScript
+      inlineScript: |
+        az sql server firewall-rule create --resource-group $(ResourceGroupName) --server $(SqlServerName) -n ReleaseMachine --start-ip-address $(ipAddress) --end-ip-address $(ipAddress)
+      
+        az sql server firewall-rule create --resource-group $(ResourceGroupName) --server '$(SqlServerName)' -n AzureServices --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0
+    enabled: true
+
+  # #
+  # # Enable Azure Service resource access to this Azure Sql Server
+  # #   
+  - task: AzureCLI@2
+    displayName: 'Get ASQL Login Token'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: ps
+      scriptLocation: inlineScript
+      inlineScript: |
+        foreach ($token IN (az account get-access-token --resource=https://database.windows.net --query accessToken)) {SET var=$token}  
+        echo "The token is:" $token
+        "##vso[task.setvariable variable=connectionToken;]$token"
+    enabled: true
+
+  # #
+  # # Make SA account db_owner
+  # #   
+  - task: AzureCLI@2
+    displayName: 'Make SA account db_owner'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: ps
+      scriptLocation: inlineScript
+      inlineScript: |
+        $connectionString = "Server=$(SqlServerName).database.windows.net;Database=${{ parameters.databaseName }};Trusted_Connection=False;Encrypt=True;Connection Timeout=30;"
+     
+        # Create the connection object 
+        $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString) 
+        
+        $connection.AccessToken = $(connectionToken)      
+        
+        $connection.AccessToken       
+        
+        # prints the connection information, it's still closed at this point, will open later on. The token is already attached. 
+        $connection 
+          
+        # Query that will be sent when the connection is open. 
+        
+        $query = "EXEC sp_addrolemember 'db_owner', '$(sql-admin)'"             
+
+        try {
+          echo "Opens connection to Azure SQL Database and executes a query"
+          $connection.Open() 
+          # After this, the token is no longer there, I believe this is because the authentication went through already, so it gets rid of it. 
+          $connection 
+        
+          echo "Executes a query"
+          $command = New-Object -Type System.Data.SqlClient.SqlCommand($query, $connection) 
+          $command.ExecuteNonQuery() 
+
+          echo "EXEC sp_addrolemember succeeded"
+        } 
+        catch {
+          echo "Something went wrong" 
+          Write-Host($error) Continue 
+        }
+        finally {          
+          echo "Closes connection to Azure SQL Database" 
+          $connection.Close()
+        }; 
+    enabled: true    

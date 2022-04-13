@@ -1,0 +1,19 @@
+parameters:
+  - name: databaseName
+  - name: azureSubscription
+
+steps:
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Creates database ${{ parameters.databaseName }} on existing SQL Server $(SQLServerName) using ${{ parameters.azureSubscription }}'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: createSQLDatabase
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      databaseEdition: S3
+      databaseBackupShortTermRetentionPeriodInDays: 7
+      storeDiagnosticLogging: true
+      diagnosticStorageAccountName: $(StorageAccountName)
+      logRetentionInDays: 30
+   

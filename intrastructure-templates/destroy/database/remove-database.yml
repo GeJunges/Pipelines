@@ -1,0 +1,20 @@
+parameters:
+  - name: databaseName
+  - name: azureSubscription  
+
+
+steps: 
+  #
+  # Removes a database from an SQL Server instance
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Removes database ${{ parameters.databaseName }} on existing SQL Server $(SQLServerName) using ${{ parameters.azureSubscription }}'
+    condition: succeededOrFailed()
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: removeSQLDatabase
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      removeConfirmation: true      
+  

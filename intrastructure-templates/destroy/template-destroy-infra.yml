@@ -1,0 +1,52 @@
+parameters:
+  - name: targetEnvironment
+  - name: azureSubscription
+
+jobs:
+
+  - job: RemovesDatabase 
+    displayName: 'Removes Database'
+    variables:
+      - template: ../../vars/${{ parameters.targetEnvironment }}-variables.yml
+        parameters: 
+          targetEnvironment: ${{ parameters.targetEnvironment }}       
+          
+    steps:
+      - checkout: self
+        clean: true
+        persistCredentials: True
+
+      - task: Bash@3
+        displayName: Check Job Variables
+        inputs:
+          targetType: 'inline'
+          script: |
+            set         
+
+      - template: database/remove-database.yml
+        parameters:
+          databaseName: $(DatabaseName)   
+          azureSubscription:  ${{ parameters.azureSubscription }} 
+
+  - job: RemovesAzureFunctionApp
+    displayName: 'Removes Azure Function App'
+    variables:
+      - template: ../../vars/${{ parameters.targetEnvironment }}-variables.yml
+        parameters: 
+          targetEnvironment: ${{ parameters.targetEnvironment }}    
+             
+    steps:
+      - checkout: self
+        clean: true
+        persistCredentials: True          
+
+      - task: Bash@3
+        displayName: Check Job Variables
+        inputs:
+          targetType: 'inline'
+          script: |
+            set        
+
+      - template: function/remove-function.yml  
+        parameters: 
+          azureSubscription: ${{ parameters.azureSubscription }}         

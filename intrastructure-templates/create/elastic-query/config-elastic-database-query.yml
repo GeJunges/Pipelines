@@ -1,0 +1,120 @@
+parameters:
+  - name: databaseName
+  - name: externalSourceDatabaseName
+  - name: azureSubscription 
+
+steps:
+
+
+  # #
+  # # Enable Azure Service resource access to this Azure Sql Server
+  # #   
+  - task: AzureCLI@2
+    displayName: 'Get ASQL Login Token'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: pscore
+      scriptLocation: inlineScript
+      inlineScript: |
+        echo "Obtain database access token"
+        foreach ($token IN (az account get-access-token --resource=https://database.windows.net --query accessToken)) {SET var=$token}  
+        echo "The token is:" $token
+        "##vso[task.setvariable variable=connectionToken;]$token"
+    enabled: true
+  
+  #
+  # Create Database Scoped Credential for existing sql database
+  #
+  - task: AzureCLI@2
+    displayName: 'Create Database Scoped Credential'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: pscore
+      scriptLocation: inlineScript
+      inlineScript: |      
+        $sqlServerUrl = "$(SqlServerName).database.windows.net" 
+        $database = "${{ parameters.databaseName }}" 
+        $connectionString = "Server=tcp:$sqlServerUrl,1433;Initial Catalog=$database;Persist Security Info=False;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;" 
+
+        # Create the connection object 
+        $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString) 
+
+        # Set AAD generated token to SQL connection token 
+        $connection.AccessToken = $(connectionToken)   
+        $connection.AccessToken 
+
+        $query = "CREATE DATABASE SCOPED CREDENTIAL ElasticDbAcbsCredential
+        WITH 
+        IDENTITY = '$(name_sqladmin)', SECRET = '$(sa-azuresql)';"             
+
+        try {
+          echo "Opens connection to Azure SQL Database"
+          $connection.Open() 
+
+          echo "Executes a query"
+          $command = New-Object -Type System.Data.SqlClient.SqlCommand($query, $connection) 
+          $command.ExecuteNonQuery()         
+
+          echo "CREATE DATABASE SCOPED CREDENTIAL ElasticDbAcbsCredential succeeded"      
+        } 
+        catch {
+          echo "Something went wrong" 
+          Write-Host($error)
+        }
+        finally {          
+          echo "Closes connection to Azure SQL Database" 
+          $connection.Close()
+        };
+      name: 'execute_query'
+      enabled: true   
+  #
+  # Create External Data Source for existing remote sql database 
+  #
+  - task: AzureCLI@2
+    displayName: 'Create External Data Source'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      scriptType: pscore     
+      scriptLocation: inlineScript
+      inlineScript: |
+        $sqlServerUrl = "$(SqlServerName).database.windows.net" 
+        $database = "${{ parameters.databaseName }}" 
+        $externalSourceDatabase = "${{ parameters.externalSourceDatabaseName }}"
+        $connectionString = "Server=tcp:$sqlServerUrl,1433;Initial Catalog=$database;Persist Security Info=False;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;" 
+
+        # Create the connection object 
+        $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString) 
+
+        # Set AAD generated token to SQL connection token 
+        $connection.AccessToken = $(connectionToken)  
+        $connection.AccessToken 
+
+        $query = "CREATE EXTERNAL DATA SOURCE ElasticDbSourceLookup
+        WITH 
+        (
+          TYPE = RDBMS, 
+          LOCATION = '$sqlServerUrl', 
+          DATABASE_NAME = '$externalSourceDatabase', 
+          CREDENTIAL = ElasticDbAcbsCredential
+        );" 
+
+        try {
+          echo "Opens connection to Azure SQL Database"
+          $connection.Open()           
+        
+          echo "Executes a query"
+          $command = New-Object -Type System.Data.SqlClient.SqlCommand($query, $connection) 
+          $command.ExecuteNonQuery()
+
+          echo "CREATE EXTERNAL DATA SOURCE ElasticDbSourceLookup succeeded"      
+        } 
+        catch {
+          echo "Something went wrong" 
+          Write-Host($error) 
+        }
+        finally {          
+          echo "Closes connection to Azure SQL Database" 
+          $connection.Close()
+        }; 
+      name: 'execute_query'
+      enabled: true           

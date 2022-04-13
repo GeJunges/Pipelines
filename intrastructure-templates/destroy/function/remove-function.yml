@@ -1,0 +1,15 @@
+parameters:
+  - name: azureSubscription
+
+steps:
+  #
+  # Removes App Service Function App
+  #  
+  - task: AzureFunctionApp@1
+    displayName: Remove Function App $(AppServiceName)
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      appServiceName: $(AppServiceName)
+      action: 'removeAppService'
+      removeConfirmation: true

@@ -1,0 +1,19 @@
+parameters:
+  - name: externalSourceDatabaseName
+  - name: azureSubscription        
+
+steps:
+  #
+  # Create Elastic User on Lookup SQL Database
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Removes Elastic Login User on database ${{ parameters.externalSourceDatabaseName }} using ${{ parameters.azureSubscription }}'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      resourceGroupName: $(ResourceGroupName)
+      action: removeSQLUser
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.externalSourceDatabaseName }}
+      sqlContainedDBUserType: sql
+      sqlContainedDBUserName: $(name_sqlreadlookup)
+      keyVaultCreateName: $(name_kv)

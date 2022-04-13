@@ -1,0 +1,179 @@
+parameters:
+  - name: databaseName
+  - name: externalSourceDatabaseName
+  - name: azureSubscription
+
+
+steps:
+
+  # #
+  # # Enable Azure Service resource access to this Azure Sql Server
+  # #   
+  - task: AzureCLI@2
+    displayName: 'Get ASQL Login Token'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }
+      scriptType: ps
+      scriptLocation: inlineScript
+      inlineScript: |
+        foreach ($token IN (az account get-access-token --resource=https://database.windows.net --query accessToken)) {SET var=$token}  
+        echo "The token is:" $token
+        "##vso[task.setvariable variable=connectionToken;]$token"
+    enabled: true
+
+  #
+  # Create Elastic User on Acbs SQL Database
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Creates Elastic Login User on database ${{ parameters.databaseName }}'
+    inputs:
+      azureSubscription: $${{ parameters.azureSubscription }
+      resourceGroupName: $(ResourceGroupName)
+      action: createSQLUser
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      sqlContainedDBUserType: sql
+      sqlContainedDBUserName: $(name_sqlreadlookup)
+      keyVaultCreateName: $(name_kv)
+
+  #
+  # Add SQL Role to Elastic User on Acbs SQL Database
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Grant DBOperator Role to Elastic Login User on database ${{ parameters.databaseName }}'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }
+      resourceGroupName: $(ResourceGroupName)
+      action: addSQLRole
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.databaseName }}
+      sqlContainedDBUserType: sql
+      sqlContainedDBUserName: $(name_sqlreadlookup)
+      sqlContainedDBUserRole: DBOperator
+
+  # #
+  # # Make SA account db_owner on Acbs SQL Database
+  # #   
+  - task: AzureCLI@2
+    displayName: 'Make SA account db_owner on database ${{ parameters.databaseName }}'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }
+      scriptType: ps
+      scriptLocation: inlineScript
+      inlineScript: |
+        $connectionString = "Server=$(SqlServerName).database.windows.net;Database=${{ parameters.databaseName }};Trusted_Connection=False;Encrypt=True;Connection Timeout=30;"
+     
+        # Create the connection object 
+        $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString) 
+        
+        $connection.AccessToken = $(connectionToken)      
+        
+        $connection.AccessToken       
+        
+        # prints the connection information, it's still closed at this point, will open later on. The token is already attached. 
+        $connection 
+          
+        # Query that will be sent when the connection is open. 
+        
+        $query = "EXEC sp_addrolemember 'db_owner', '$(name_sqladmin)'"             
+
+        try {
+          echo "Opens connection to Azure SQL Database and executes a query"
+          $connection.Open() 
+          # After this, the token is no longer there, I believe this is because the authentication went through already, so it gets rid of it. 
+          $connection 
+        
+          echo "Executes a query"
+          $command = New-Object -Type System.Data.SqlClient.SqlCommand($query, $connection) 
+          $command.ExecuteNonQuery() 
+
+          echo "EXEC sp_addrolemember succeeded"
+        } 
+        catch {
+          echo "Something went wrong" 
+          Write-Host($error) Continue 
+        }
+        finally {          
+          echo "Closes connection to Azure SQL Database" 
+          $connection.Close()
+        }; 
+    enabled: true    
+
+
+  #
+  # Create Elastic User on Lookup SQL Database
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Creates Elastic Login User on database ${{ parameters.externalSourceDatabaseName }}'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }
+      resourceGroupName: $(ResourceGroupName)
+      action: createSQLUser
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.externalSourceDatabaseName }}
+      sqlContainedDBUserType: sql
+      sqlContainedDBUserName: $(name_sqlreadlookup)
+      keyVaultCreateName: $(name_kv)
+
+  #
+  # Add SQL Role to Elastic User on Lookup SQL Database
+  #
+  - task: SqlAzureDacpacDeployment@1
+    displayName: 'Grant DBOperator Role to Elastic Login User on database ${{ parameters.externalSourceDatabaseName }}'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }
+      resourceGroupName: $(ResourceGroupName)
+      action: addSQLRole
+      sqlServerName: $(SqlServerName)
+      databaseName: ${{ parameters.externalSourceDatabaseName }}
+      sqlContainedDBUserType: sql
+      sqlContainedDBUserName: $(name_sqlreadlookup)
+      sqlContainedDBUserRole: DBOperator      
+
+  # #
+  # # Make SA account db_owner on Lookup SQL Database
+  # #   
+  - task: AzureCLI@2
+    displayName: 'Make SA account db_owner on database ${{ parameters.externalSourceDatabaseName }}'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }
+      scriptType: ps
+      scriptLocation: inlineScript
+      inlineScript: |
+        $connectionString = "Server=$(SqlServerName).database.windows.net;Database=${{ parameters.externalSourceDatabaseName }};Trusted_Connection=False;Encrypt=True;Connection Timeout=30;"
+     
+        # Create the connection object 
+        $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString) 
+        
+        $connection.AccessToken = $(connectionToken)      
+        
+        $connection.AccessToken       
+        
+        # prints the connection information, it's still closed at this point, will open later on. The token is already attached. 
+        $connection 
+          
+        # Query that will be sent when the connection is open. 
+        
+        $query = "EXEC sp_addrolemember 'db_owner', '$(name_sqlreadlookup)'"             
+
+        try {
+          echo "Opens connection to Azure SQL Database and executes a query"
+          $connection.Open() 
+          # After this, the token is no longer there, I believe this is because the authentication went through already, so it gets rid of it. 
+          $connection 
+        
+          echo "Executes a query"
+          $command = New-Object -Type System.Data.SqlClient.SqlCommand($query, $connection) 
+          $command.ExecuteNonQuery() 
+
+          echo "EXEC sp_addrolemember succeeded"
+        } 
+        catch {
+          echo "Something went wrong" 
+          Write-Host($error) Continue 
+        }
+        finally {          
+          echo "Closes connection to Azure SQL Database" 
+          $connection.Close()
+        }; 
+    enabled: true          

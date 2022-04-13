@@ -1,0 +1,50 @@
+parameters:
+  - name: infrastructureAction
+    displayName: Infrastructure Action
+    type: string
+    default: Create
+    values:
+      - Create
+      - Destroy        
+
+# resources:
+#   repositories:
+#   - repository: pipeline-templates
+#     type: git
+#     name: Place/name-pipeline-templates   
+
+trigger:
+- none
+
+variables:
+  - template: templates/variables.yml
+  - name: AzureSubscription
+    value: 'subscription-t-rg-name' #this default value is needed to initialize the Stages but it will be overrided by each Stage in deploy.yml file
+
+pool:
+  vmImage: windows-latest
+
+stages:
+
+  - template: intrastructure-templates/intrastructure-templates/deploy-infra.yml   
+    parameters: 
+      targetEnvironment: 'test'   
+      azureSubscription: 'subscription-t-rg-name' 
+      infrastructureAction: ${{ parameters.infrastructureAction }}   
+
+  - template: intrastructure-templates/intrastructure-templates/deploy-infra.yml   
+    parameters: 
+      targetEnvironment: 'acceptance'   
+      azureSubscription: 'subscription-a-rg-name'
+      infrastructureAction: ${{ parameters.infrastructureAction }}         
+
+  - template: intrastructure-templates/intrastructure-templates/deploy-infra.yml   
+    parameters: 
+      targetEnvironment: 'production'   
+      azureSubscription: 'subscription-p-rg-name'
+      infrastructureAction: ${{ parameters.infrastructureAction }}                
+
+
+
+  
+ 
